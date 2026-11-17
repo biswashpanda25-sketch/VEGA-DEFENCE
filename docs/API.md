@@ -37,6 +37,7 @@ Standard error envelope: `{"detail": "<human readable>"}` with 400 (validation/d
 | GET | `/entities?q=&entity_type=&district=&limit=&offset=` | Tenant-scoped, paginated |
 | POST | `/entities` | Create entity |
 | GET | `/entities/{id}` | Entity + all relationships with evidence |
+| GET | `/entities/{id}/impact?depth=3&direction=downstream` | Breadth-first dependency traversal (max depth 4, cycle-safe); returns affected nodes by hop distance, relationship paths, and link evidence. Inferred edges marked as hypotheses. Scoped to caller tenant and clearance (never counts or leaks hidden records). |
 | GET | `/relationships?provenance=` | Filter by provenance class |
 | POST | `/relationships` | **Requires** `evidence`; `provenance ∈ confirmed\|imported\|inferred\|unverified` |
 | GET | `/graph?limit=&provenance=` | `{nodes, edges}` for the explorer |

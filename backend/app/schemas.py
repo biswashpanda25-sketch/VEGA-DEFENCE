@@ -151,3 +151,39 @@ class SearchResult(BaseModel):
     title: str
     snippet: str
     organization_id: str
+
+class ImpactEdge(BaseModel):
+    id: str
+    source_id: str
+    target_id: str
+    source_name: Optional[str] = ""
+    target_name: Optional[str] = ""
+    rel_type: str
+    provenance: str
+    confidence: float
+    evidence: str
+    source_ref: Optional[str] = ""
+    is_hypothesis: bool = False
+
+class ImpactNode(BaseModel):
+    id: str
+    name: str
+    entity_type: str
+    district: Optional[str] = ""
+    state: Optional[str] = "Odisha"
+    status: Optional[str] = "active"
+    confidence: float = 1.0
+    classification: str = "INTERNAL"
+    attributes: Optional[dict] = {}
+    hop_distance: int
+    path: list[ImpactEdge] = []
+    path_confidence: float = 1.0
+    is_hypothesis: bool = False
+
+class ImpactResponse(BaseModel):
+    root_entity: dict
+    depth: int
+    direction: str = "downstream"
+    total_affected: int
+    nodes: list[ImpactNode]
+    edges: list[ImpactEdge]

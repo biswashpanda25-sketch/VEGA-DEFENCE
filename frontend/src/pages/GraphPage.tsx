@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../api'
+import { useSearchParams } from 'react-router-dom'
+import { api, type ImpactResponse, type ImpactNode } from '../api'
 import { Badge, Card, Empty, ErrorBox, Section, Spinner } from '../components/ui'
 import { useUI } from '../store'
 
@@ -15,8 +16,17 @@ const TYPE_COLOR: Record<string, string> = {
   facility: '#A78BFA', warehouse: '#6D8CFF', inventory_item: '#8298AE', project: '#D9534F',
   supplier: '#94A3B8', document: '#8298AE', case: '#D5A13C', location: '#5AA87A',
 }
+const HOP_COLORS: Record<number, string> = {
+  1: '#F59E0B', // Amber
+  2: '#3B82F6', // Blue
+  3: '#8B5CF6', // Purple
+  4: '#EC4899', // Pink
+}
 
 export default function GraphPage() {
+  const [params] = useSearchParams()
+  const initialNodeId = params.get('node')
+
   const { data, isLoading, error } = useQuery({ queryKey: ['graph'], queryFn: () => api.get<{ nodes: Node[]; edges: Edge[] }>('/graph?limit=250') })
   const [provFilter, setProvFilter] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<string>('')
@@ -34,6 +44,13 @@ export default function GraphPage() {
   const [timelineMode, setTimelineMode] = useState(false)
   const [timelinePct, setTimelinePct] = useState(100)
   const [isPlaying, setIsPlaying] = useState(false)
+
+  // Impact Analysis state
+  const [impactResult, setImpactResult] = useState<ImpactResponse | null>(null)
+  const [impactLoading, setImpactLoading] = useState(false)
+  const [impactDepth, setImpactDepth] = useState(3)
+  const [impactDirection, setImpactDirection] = useState<'downstream' | 'upstream' | 'both'>('downstream')
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({})
 
   const W = 900, H = 560
 
@@ -55,6 +72,14 @@ export default function GraphPage() {
     [data, nodeIds, provFilter],
   )
 
+  // Auto-select node from query param
+  useEffect(() => {
+    if (initialNodeId && rawNodes.length > 0 && !selected) {
+      const match = rawNodes.find((n) => n.id === initialNodeId)
+      if (match) setSelected(match)
+    }
+  }, [initialNodeId, rawNodes, selected])
+
   // Timeline filtering
   const edges = useMemo(() => {
     if (!timelineMode || timelinePct >= 100) return rawEdges
@@ -68,6 +93,17 @@ export default function GraphPage() {
     edges.forEach((e) => { activeIds.add(e.source); activeIds.add(e.target) })
     return rawNodes.filter((n) => activeIds.has(n.id))
   }, [rawNodes, edges, timelineMode, timelinePct])
+
+  // Impact lookups
+  const impactNodeMap = useMemo(() => {
+    if (!impactResult) return new Map<string, ImpactNode>()
+    return new Map(impactResult.nodes.map((n) => [n.id, n]))
+  }, [impactResult])
+
+  const impactEdgeSet = useMemo(() => {
+    if (!impactResult) return new Set<string>()
+    return new Set(impactResult.edges.map((e) => e.id))
+  }, [impactResult])
 
   // Shortest path calculation (BFS)
   const activePath = useMemo(() => {
@@ -117,7 +153,7 @@ export default function GraphPage() {
     return () => clearInterval(timer)
   }, [isPlaying])
 
-  // deterministic force-directed layout (Fruchterman–Reingold style), computed once per node set
+  // Force-directed layout
   useEffect(() => {
     if (!rawNodes.length) return
     const n = rawNodes.length
@@ -176,6 +212,22 @@ export default function GraphPage() {
     inspect(n)
   }
 
+  async function runImpact(entityId: string, depth = impactDepth, direction = impactDirection) {
+    setImpactLoading(true)
+    try {
+      const res = await api.get<ImpactResponse>(`/entities/${entityId}/impact?depth=${depth}&direction=${direction}`)
+      setImpactResult(res)
+    } catch (err: any) {
+      console.error('Impact analysis query failed', err)
+    } finally {
+      setImpactLoading(false)
+    }
+  }
+
+  function clearImpact() {
+    setImpactResult(null)
+  }
+
   async function inspect(n: Node) {
     setSelected(n)
     const detail = await api.get<any>(`/entities/${n.id}`)
@@ -191,7 +243,16 @@ export default function GraphPage() {
             <Badge tone="blue">Degree: {nodeDegrees[n.id] ?? 0}</Badge>
           </div>
           <p className="tiny dim" style={{ margin: 0 }}>{detail.entity.description || 'No description recorded.'}</p>
-          <div className="eyebrow" style={{ marginTop: 4 }}>Relationships ({detail.relationships.length})</div>
+          <div style={{ marginTop: 4 }}>
+            <button
+              className="btn sm primary"
+              style={{ width: '100%' }}
+              onClick={() => runImpact(n.id)}
+            >
+              ⚡ Run Impact Analysis on this Entity
+            </button>
+          </div>
+          <div className="eyebrow" style={{ marginTop: 6 }}>Relationships ({detail.relationships.length})</div>
           {detail.relationships.map((r: any) => (
             <div key={r.id} className="evidence" style={{ borderLeftColor: PROV_COLOR[r.provenance] }}>
               <div className="row between gap6">
@@ -220,7 +281,7 @@ export default function GraphPage() {
   return (
     <Section
       title="Knowledge Graph & Network Intelligence"
-      sub="Interactive entity graph with shortest-path tracing, temporal timeline playback, and degree centrality analysis."
+      sub="Interactive entity graph with impact analysis blast-radius, shortest-path tracing, and degree centrality analysis."
       actions={
         <div className="row gap6" style={{ flexWrap: 'wrap' }}>
           <button
@@ -294,6 +355,23 @@ export default function GraphPage() {
         </div>
       )}
 
+      {/* Active Impact Banner */}
+      {impactResult && (
+        <div className="banner" style={{ marginBottom: 12, borderColor: '#EF4444', background: 'rgba(239, 68, 68, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div className="row gap8" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: '#EF4444' }}>⚡ Active Impact Analysis:</span>
+            <span style={{ fontWeight: 600 }}>{impactResult.root_entity.name}</span>
+            <Badge tone="neutral">{impactResult.root_entity.entity_type}</Badge>
+            <Badge tone="red">{impactResult.total_affected} Dependent Facilities Affected</Badge>
+            <span className="tiny mono dim">({impactResult.depth} hops, {impactResult.direction})</span>
+            {impactResult.nodes.some((n) => n.is_hypothesis) && (
+              <Badge tone="amber">⚠️ Hypotheses in path</Badge>
+            )}
+          </div>
+          <button className="btn sm" onClick={clearImpact}>Clear Impact View</button>
+        </div>
+      )}
+
       <div className="grid g-2-1">
         <Card bodyStyle={{ padding: 0 }} title={`${nodes.length} nodes · ${edges.length} edges`}
           actions={
@@ -315,21 +393,33 @@ export default function GraphPage() {
               <marker id="arrow-active" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
               </marker>
+              <marker id="arrow-impact" viewBox="0 0 10 10" refX="18" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#EF4444" />
+              </marker>
             </defs>
             <g transform={`translate(${offset.x} ${offset.y}) scale(${scale})`}>
               {edges.map((e) => {
                 const s = positions[e.source], t = positions[e.target]
                 if (!s || !t) return null
                 const inPath = activePath?.edgeSet?.has(e.id)
-                const isDimmed = activePath && !inPath
+                const inImpact = impactEdgeSet.has(e.id)
+                const isDimmed = (activePath && !inPath) || (impactResult && !inImpact)
+
+                let strokeColor = inPath ? 'var(--accent)' : (PROV_COLOR[e.provenance] ?? '#94a3b8')
+                if (inImpact) {
+                  strokeColor = e.provenance === 'inferred' ? '#D5A13C' : '#E05D44'
+                }
+
+                const isHypothesis = e.provenance === 'inferred' || e.provenance === 'unverified'
+                const strokeWidth = inPath ? 3 : inImpact ? 2.5 : (e.provenance === 'confirmed' ? 1.5 : 1)
 
                 return (
                   <line key={e.id} x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                    stroke={inPath ? 'var(--accent)' : (PROV_COLOR[e.provenance] ?? '#94a3b8')}
-                    strokeOpacity={inPath ? 1 : isDimmed ? 0.08 : (e.provenance === 'confirmed' ? 0.75 : 0.55)}
-                    strokeWidth={inPath ? 3 : (e.provenance === 'confirmed' ? 1.5 : 1)}
-                    strokeDasharray={e.provenance === 'inferred' ? '4 3' : e.provenance === 'unverified' ? '2 3' : undefined}
-                    markerEnd={inPath ? 'url(#arrow-active)' : 'url(#arrow)'} />
+                    stroke={strokeColor}
+                    strokeOpacity={inPath || inImpact ? 1 : isDimmed ? 0.06 : (e.provenance === 'confirmed' ? 0.75 : 0.55)}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={isHypothesis ? '4 3' : undefined}
+                    markerEnd={inImpact ? 'url(#arrow-impact)' : inPath ? 'url(#arrow-active)' : 'url(#arrow)'} />
                 )
               })}
               {nodes.map((n) => {
@@ -340,17 +430,27 @@ export default function GraphPage() {
                 const r = baseR + Math.min(deg * 0.8, 6)
                 const isSel = selected?.id === n.id
                 const inPath = activePath?.nodeSet?.has(n.id)
-                const isDimmed = activePath && !inPath
+                const isImpactRoot = impactResult?.root_entity.id === n.id
+                const impNode = impactNodeMap.get(n.id)
+                const inImpact = isImpactRoot || !!impNode
+                const isDimmed = (activePath && !inPath) || (impactResult && !inImpact)
+
+                const hopColor = impNode ? (HOP_COLORS[impNode.hop_distance] ?? '#E05D44') : undefined
 
                 return (
-                  <g key={n.id} transform={`translate(${p.x} ${p.y})`} onClick={() => handleNodeClick(n)} style={{ cursor: 'pointer', opacity: isDimmed ? 0.15 : 1 }}>
-                    <circle r={r + (inPath ? 6 : isSel ? 4 : 0)} fill="transparent"
-                      stroke={inPath ? 'var(--accent)' : isSel ? 'var(--accent)' : 'transparent'}
-                      strokeWidth={inPath ? 2.5 : 1.5}
-                      strokeDasharray={inPath ? '3 2' : undefined} />
+                  <g key={n.id} transform={`translate(${p.x} ${p.y})`} onClick={() => handleNodeClick(n)} style={{ cursor: 'pointer', opacity: isDimmed ? 0.12 : 1 }}>
+                    {/* Outer highlight ring */}
+                    <circle
+                      r={r + (inPath ? 6 : isImpactRoot ? 7 : impNode ? 5 : isSel ? 4 : 0)}
+                      fill="transparent"
+                      stroke={inPath ? 'var(--accent)' : isImpactRoot ? '#EF4444' : hopColor ? hopColor : isSel ? 'var(--accent)' : 'transparent'}
+                      strokeWidth={inPath ? 2.5 : isImpactRoot ? 3 : impNode ? 2.5 : 1.5}
+                      strokeDasharray={inPath ? '3 2' : isImpactRoot ? '4 2' : undefined}
+                    />
                     <circle r={r} fill={TYPE_COLOR[n.type] ?? '#7d8b99'} fillOpacity={0.9} stroke="var(--bg-2)" strokeWidth={1.5} />
-                    <text y={r + 12} textAnchor="middle" fontSize={8.5} fill="var(--text)" fontWeight={inPath ? '700' : '500'}
+                    <text y={r + 12} textAnchor="middle" fontSize={8.5} fill="var(--text)" fontWeight={inPath || inImpact ? '700' : '500'}
                       style={{ pointerEvents: 'none' }}>
+                      {impNode ? `[H${impNode.hop_distance}] ` : isImpactRoot ? `[ROOT] ` : ''}
                       {n.label.replace(' (Synthetic)', '').slice(0, 22)}
                     </text>
                   </g>
@@ -386,6 +486,21 @@ export default function GraphPage() {
                 </span>
               </div>
             ))}
+            {impactResult && (
+              <>
+                <div className="hr" />
+                <div className="eyebrow" style={{ marginBottom: 6 }}>Impact Hop Distance</div>
+                {[1, 2, 3, 4].map((h) => (
+                  <div className="legend-row" key={h}>
+                    <span className="legend-swatch" style={{ background: HOP_COLORS[h], borderRadius: '50%' }} />
+                    <span className="tiny">Hop {h} Affected</span>
+                    <span className="tiny muted" style={{ marginLeft: 'auto' }}>
+                      {impactResult.nodes.filter((n) => n.hop_distance === h).length}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
             <div className="hr" />
             <div className="eyebrow" style={{ marginBottom: 6 }}>Node type</div>
             {Object.entries(TYPE_COLOR).filter(([t]) => types.includes(t)).map(([k, c]) => (
@@ -396,8 +511,9 @@ export default function GraphPage() {
             ))}
           </Card>
 
+          {/* Selected entity Card */}
           <Card title="Selected entity">
-            {!selected ? <Empty>Click any node to inspect evidence or set path</Empty> : (
+            {!selected ? <Empty>Click any node to inspect evidence, trace impact, or set path</Empty> : (
               <div className="stack gap6">
                 <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selected.label}</div>
                 <div className="row gap6">
@@ -409,8 +525,21 @@ export default function GraphPage() {
                   <dt>District</dt><dd>{selected.district || '—'}</dd>
                   <dt>Confidence</dt><dd>{(selected.confidence * 100).toFixed(0)}%</dd>
                 </dl>
-                <div className="row gap4" style={{ marginTop: 4 }}>
+                <div className="row gap4" style={{ marginTop: 4, flexWrap: 'wrap' }}>
                   <button className="btn sm" onClick={() => inspect(selected)}>Evidence panel</button>
+                  <button
+                    className={`btn sm ${impactResult?.root_entity.id === selected.id ? 'primary' : ''}`}
+                    onClick={() => runImpact(selected.id)}
+                    disabled={impactLoading}
+                    title="Analyze downstream blast radius and dependencies"
+                  >
+                    {impactLoading && impactResult?.root_entity.id === selected.id ? '⚡ Tracing…' : '⚡ Impact'}
+                  </button>
+                  {impactResult && (
+                    <button className="btn sm ghost" onClick={clearImpact} title="Reset impact highlighting">
+                      Clear Impact
+                    </button>
+                  )}
                   {pathMode && (
                     <button className="btn sm primary" onClick={() => {
                       if (!sourceId) setSourceId(selected.id)
@@ -425,6 +554,198 @@ export default function GraphPage() {
           </Card>
         </div>
       </div>
+
+      {/* Impact Analysis & Evidence Chain Section */}
+      {impactResult && (
+        <div style={{ marginTop: 14 }}>
+          <Card
+            title={
+              <div className="row between gap8" style={{ width: '100%', alignItems: 'center' }}>
+                <div className="row gap8" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#EF4444' }}>⚡ Impact Analysis</span>
+                  <span style={{ fontWeight: 600 }}>{impactResult.root_entity.name}</span>
+                  <Badge tone="neutral">{impactResult.root_entity.entity_type}</Badge>
+                  <Badge tone="red">{impactResult.total_affected} Dependent Facilities Affected</Badge>
+                  {impactResult.nodes.some((n) => n.is_hypothesis) && (
+                    <Badge tone="amber">⚠️ Inferred Hypotheses Present</Badge>
+                  )}
+                </div>
+                <button className="btn sm ghost" onClick={clearImpact}>Close Impact Analysis</button>
+              </div>
+            }
+          >
+            {/* Controls Bar */}
+            <div className="row between gap12" style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
+              <div className="row gap8" style={{ alignItems: 'center' }}>
+                <span className="tiny" style={{ fontWeight: 600 }}>Traversal Depth:</span>
+                {[1, 2, 3, 4].map((d) => (
+                  <button
+                    key={d}
+                    className={`btn sm ${impactDepth === d ? 'primary' : 'ghost'}`}
+                    style={{ minWidth: 64, padding: '2px 8px' }}
+                    onClick={() => {
+                      setImpactDepth(d)
+                      runImpact(impactResult.root_entity.id, d, impactDirection)
+                    }}
+                  >
+                    {d} {d === 1 ? 'Hop' : 'Hops'}
+                  </button>
+                ))}
+              </div>
+              <div className="row gap8" style={{ alignItems: 'center' }}>
+                <span className="tiny" style={{ fontWeight: 600 }}>Direction:</span>
+                {(['downstream', 'upstream', 'both'] as const).map((dir) => (
+                  <button
+                    key={dir}
+                    className={`btn sm ${impactDirection === dir ? 'primary' : 'ghost'}`}
+                    style={{ padding: '2px 8px' }}
+                    onClick={() => {
+                      setImpactDirection(dir)
+                      runImpact(impactResult.root_entity.id, impactDepth, dir)
+                    }}
+                  >
+                    {dir === 'downstream' ? 'Downstream (Dependents)' : dir === 'upstream' ? 'Upstream (Dependencies)' : 'Both'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Hop Distribution Summary */}
+            <div className="row gap8" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
+              {[1, 2, 3, 4].filter((h) => h <= impactDepth).map((h) => {
+                const count = impactResult.nodes.filter((n) => n.hop_distance === h).length
+                return (
+                  <div key={h} className="badge" style={{ background: 'rgba(255,255,255,0.04)', borderColor: HOP_COLORS[h], color: HOP_COLORS[h], padding: '4px 10px' }}>
+                    <strong>Hop {h}:</strong> {count} {count === 1 ? 'entity' : 'entities'}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Ranked List of Affected Entities */}
+            {impactResult.nodes.length === 0 ? (
+              <Empty>No dependent entities identified within {impactResult.depth} hops for this direction.</Empty>
+            ) : (
+              <div className="stack gap8">
+                {impactResult.nodes.map((node, idx) => {
+                  const isExp = expandedNodes[node.id] ?? true
+                  const hopCol = HOP_COLORS[node.hop_distance] ?? 'var(--accent)'
+                  return (
+                    <div
+                      key={node.id}
+                      style={{
+                        padding: '10px 12px',
+                        background: 'var(--panel-2)',
+                        border: '1px solid var(--line)',
+                        borderLeft: `4px solid ${hopCol}`,
+                        borderRadius: 4,
+                      }}
+                    >
+                      <div className="row between gap8" style={{ alignItems: 'flex-start' }}>
+                        <div className="stack gap4" style={{ flex: 1 }}>
+                          <div className="row gap6" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span className="tiny mono" style={{ color: 'var(--muted)', fontWeight: 600 }}>#{idx + 1}</span>
+                            <span
+                              className="badge"
+                              style={{ background: `${hopCol}22`, borderColor: `${hopCol}66`, color: hopCol }}
+                            >
+                              Hop {node.hop_distance}
+                            </span>
+                            <span
+                              style={{ fontWeight: 600, fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                              onClick={() => {
+                                const found = rawNodes.find((n) => n.id === node.id)
+                                if (found) setSelected(found)
+                              }}
+                              title="Click to select in graph"
+                            >
+                              {node.name}
+                            </span>
+                            <Badge tone="neutral">{node.entity_type}</Badge>
+                            {node.district && <span className="tiny dim mono">Sector: {node.district}</span>}
+                            {node.is_hypothesis ? (
+                              <Badge tone="amber">⚠️ Inferred Hypothesis</Badge>
+                            ) : (
+                              <Badge tone="green">Confirmed Grounding</Badge>
+                            )}
+                            <span className="tiny mono" style={{ marginLeft: 'auto', color: 'var(--muted)' }}>
+                              Path Confidence: {(node.path_confidence * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="row gap6">
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => {
+                              const found = rawNodes.find((n) => n.id === node.id)
+                              if (found) inspect(found)
+                            }}
+                          >
+                            Inspect
+                          </button>
+                          <button
+                            className="btn sm ghost"
+                            onClick={() => setExpandedNodes((prev) => ({ ...prev, [node.id]: !isExp }))}
+                          >
+                            {isExp ? 'Hide Evidence ▴' : 'View Evidence ▾'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Evidence Trail for each link */}
+                      {isExp && (
+                        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--line)' }}>
+                          <div className="eyebrow" style={{ marginBottom: 6 }}>
+                            Relationship Path & Evidence Chain ({node.path.length} {node.path.length === 1 ? 'link' : 'links'}):
+                          </div>
+                          <div className="stack gap6">
+                            {node.path.map((edge, eIdx) => (
+                              <div
+                                key={edge.id || eIdx}
+                                className="evidence"
+                                style={{
+                                  borderLeftColor: PROV_COLOR[edge.provenance] ?? 'var(--line-2)',
+                                  background: 'rgba(0,0,0,0.18)',
+                                  padding: '8px 10px',
+                                  borderRadius: '0 4px 4px 0',
+                                }}
+                              >
+                                <div className="row between gap6" style={{ marginBottom: 4 }}>
+                                  <div className="row gap6" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <span className="tiny mono" style={{ fontWeight: 600 }}>Link {eIdx + 1}:</span>
+                                    <span className="tiny" style={{ fontWeight: 600 }}>{edge.source_name || edge.source_id}</span>
+                                    <span className="tiny dim">➔</span>
+                                    <span className="tiny mono" style={{ color: 'var(--accent)' }}>[{edge.rel_type}]</span>
+                                    <span className="tiny dim">➔</span>
+                                    <span className="tiny" style={{ fontWeight: 600 }}>{edge.target_name || edge.target_id}</span>
+                                  </div>
+                                  <div className="row gap4">
+                                    <Badge tone={edge.provenance}>{edge.provenance}</Badge>
+                                    {edge.is_hypothesis && <Badge tone="amber">Hypothesis</Badge>}
+                                    <span className="tiny mono dim">{(edge.confidence * 100).toFixed(0)}% conf</span>
+                                  </div>
+                                </div>
+                                <div className="tiny" style={{ color: 'var(--text-2)', marginTop: 2 }}>
+                                  <strong>Grounding Evidence:</strong> {edge.evidence || 'No evidence recorded'}
+                                </div>
+                                {edge.source_ref && (
+                                  <div className="tiny mono muted" style={{ marginTop: 2 }}>
+                                    <strong>Source Reference:</strong> {edge.source_ref}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </Section>
   )
 }

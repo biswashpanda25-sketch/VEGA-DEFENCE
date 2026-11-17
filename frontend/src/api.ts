@@ -75,6 +75,55 @@ export type SearchHit = {
   classification: string; synthetic: boolean; score: number
 }
 
+export type ImpactEdge = {
+  id: string
+  source_id: string
+  target_id: string
+  source_name: string
+  target_name: string
+  rel_type: string
+  provenance: string
+  confidence: number
+  evidence: string
+  source_ref: string
+  is_hypothesis: boolean
+}
+
+export type ImpactNode = {
+  id: string
+  name: string
+  entity_type: string
+  district: string
+  state: string
+  status: string
+  confidence: number
+  classification: string
+  attributes?: Record<string, any>
+  hop_distance: number
+  path: ImpactEdge[]
+  path_confidence: number
+  is_hypothesis: boolean
+}
+
+export type ImpactResponse = {
+  root_entity: {
+    id: string
+    name: string
+    entity_type: string
+    district: string
+    state: string
+    status: string
+    confidence: number
+    classification: string
+    attributes?: Record<string, any>
+  }
+  depth: number
+  direction: 'downstream' | 'upstream' | 'both'
+  total_affected: number
+  nodes: ImpactNode[]
+  edges: ImpactEdge[]
+}
+
 export const ROLES = ['platform_admin', 'org_admin', 'data_admin', 'analyst', 'reviewer', 'readonly', 'auditor']
 
 export const roleLabel = (r: string) => r.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())

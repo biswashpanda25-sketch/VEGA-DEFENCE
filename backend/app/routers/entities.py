@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from ..db import get_db
 from ..models import Entity, Relationship, User
-from ..schemas import EntityCreate, EntityOut, RelationshipCreate, RelationshipOut
+from ..schemas import EntityCreate, EntityOut, RelationshipCreate, RelationshipOut, ImpactResponse
 from ..deps import get_current_user, require_role, audit
 from ..policy import scope_query, redact, can_read, assert_can_read, AccessDenied, audit_purpose
-from ..services import resolution
+from ..services import resolution, impact
 
 router = APIRouter(prefix="/api/v1", tags=["graph"])
 VALID_PROV = {"confirmed", "imported", "inferred", "unverified"}
@@ -75,6 +75,27 @@ def get_entity(entity_id: str, purpose: str | None = None,
                            "confidence": r.confidence, "evidence": r.evidence,
                            "source_ref": r.source_ref} for r in rels],
     }
+
+@router.get("/entities/{entity_id}/impact", response_model=ImpactResponse)
+def get_entity_impact(entity_id: str, depth: int = Query(3, ge=1, le=4),
+                      direction: str = Query("downstream", pattern="^(downstream|upstream|both)$"),
+                      purpose: str | None = None,
+                      current: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        result = impact.analyze_impact(
+            db=db,
+            root_entity_id=entity_id,
+            user=current,
+            max_depth=depth,
+            direction=direction,
+            purpose=purpose,
+        )
+    except AccessDenied:
+        raise HTTPException(404, "Entity not found")
+    audit(db, current, "entity.impact", entity_id,
+          f"depth={depth} direction={direction} affected={result['total_affected']}",
+          purpose=audit_purpose(current, purpose))
+    return result
 
 @router.get("/relationships", response_model=list[RelationshipOut])
 def list_relationships(provenance: str | None = None, limit: int = Query(300, le=1000),
