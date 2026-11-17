@@ -1,0 +1,121 @@
+{
+  "measured_at": "2026-11-12T16:28:47Z",
+  "conditions": {
+    "database": "PostgreSQL 17.11 + PostGIS 3.5 + pg_trgm",
+    "rows": 1000000,
+    "load_seconds": 25.5,
+    "rows_per_second": 39173,
+    "index_build_seconds": 14.1,
+    "postgis_geo_index": true,
+    "indexes_present": [
+      "entities_pkey",
+      "ix_entities_canonical_id",
+      "ix_entities_classification",
+      "ix_entities_district",
+      "ix_entities_entity_type",
+      "ix_entities_name",
+      "ix_entities_name_trgm",
+      "ix_entities_organization_id",
+      "ix_scale_class",
+      "ix_scale_geo",
+      "ix_scale_name_org",
+      "ix_scale_org_type"
+    ],
+    "client": "psycopg3 sequential queries, single connection",
+    "hardware": "shared CI-class sandbox; absolute numbers will differ on production hardware",
+    "verified_row_count": 999950
+  },
+  "queries": [
+    {
+      "query": "paginated entity list (page 1)",
+      "p50_ms": 0.14,
+      "p95_ms": 0.45,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT id,name,entity_type,district,status FROM entities WHERE organization_id=%s AND classification IN ('INTERNAL') AND canonical_id IS NULL ORDER BY name LIMIT 100 OFFSET 0"
+    },
+    {
+      "query": "paginated entity list (page 500)",
+      "p50_ms": 100.75,
+      "p95_ms": 119.35,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT id,name,entity_type,district,status FROM entities WHERE organization_id=%s AND classification IN ('INTERNAL') AND canonical_id IS NULL ORDER BY name LIMIT 100 OFFSET 50000"
+    },
+    {
+      "query": "trigram name search",
+      "p50_ms": 633.07,
+      "p95_ms": 663.99,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT id,name FROM entities WHERE organization_id=%s AND name %% %s ORDER BY similarity(name, %s) DESC LIMIT 20"
+    },
+    {
+      "query": "district filter + aggregate",
+      "p50_ms": 121.21,
+      "p95_ms": 140.31,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT district, COUNT(*) FROM entities WHERE organization_id=%s AND classification IN ('INTERNAL') GROUP BY district ORDER BY 2 DESC"
+    },
+    {
+      "query": "two-hop relationship join (UNION of indexed lookups)",
+      "p50_ms": 58.79,
+      "p95_ms": 75.0,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "WITH e AS ( SELECT id FROM entities WHERE organization_id=%s AND classification IN ('INTERNAL') LIMIT 200) SELECT e.id, COUNT(*) FROM e JOIN (SELECT source_id AS id FROM relationships UNION ALL SELECT target_id FROM rela"
+    },
+    {
+      "query": "postgis radius 50km, KNN ordering",
+      "p50_ms": 1.05,
+      "p95_ms": 2.66,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off",
+        "SET max_parallel_workers_per_gather = 0"
+      ],
+      "sql": "SELECT id, ST_Distance(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography, ST_SetSRID(ST_MakePoint(85.62, 20.18), 4326)::geography)/1000 AS km FROM entities WHERE organization_id=%s AND ST_DWithin(ST_SetSRID("
+    },
+    {
+      "query": "postgis radius 50km, distance-SORTED (naive)",
+      "p50_ms": 350.64,
+      "p95_ms": 419.63,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT id, ST_Distance(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography, ST_SetSRID(ST_MakePoint(85.62, 20.18), 4326)::geography)/1000 AS km FROM entities WHERE organization_id=%s AND ST_DWithin(ST_SetSRID("
+    },
+    {
+      "query": "postgis count within 2km",
+      "p50_ms": 19.14,
+      "p95_ms": 23.44,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT count(*) FROM entities WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography, ST_SetSRID(ST_MakePoint(85.62, 20.18), 4326)::geography, 2000)"
+    },
+    {
+      "query": "trigram search on a selective token",
+      "p50_ms": 46.54,
+      "p95_ms": 49.32,
+      "n": 20,
+      "session_settings": [
+        "SET jit = off"
+      ],
+      "sql": "SELECT id,name FROM entities WHERE name %% %s ORDER BY similarity(name,%s) DESC LIMIT 20"
+    }
+  ]
+}

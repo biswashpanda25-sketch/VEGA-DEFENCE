@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+dist/
+*.db
+*.db-journal
+.env
+deploy/secrets/*.txt
+.pytest_cache/
+.ruff_cache/
+docs/*.local

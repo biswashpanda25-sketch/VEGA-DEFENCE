@@ -1,0 +1,21 @@
+# GOTHAM INDIA — backend runtime dependencies (pinned; verified in this environment)
+fastapi==0.162.5
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.8
+pydantic==2.14.2
+alembic==1.20.1
+psycopg[binary]==3.3.9          # production driver; SQLite remains supported for local dev
+python-jose[cryptography]==3.5.0
+passlib==1.7.4
+bcrypt==5.0.0
+python-multipart==0.0.33
+email-validator==2.3.0
+python-dotenv==1.2.4
+pyotp==2.10.0                   # TOTP multi-factor authentication
+reportlab==5.1.0                # server-side PDF report rendering
+httpx==0.28.1
+openpyxl==3.1.5
+pandas==2.2.3
+
+# Test / tooling
+pytest==9.0.3

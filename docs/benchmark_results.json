@@ -1,0 +1,97 @@
+{
+  "measured_at": "2026-11-12T15:27:47Z",
+  "conditions": {
+    "base_url": "http://127.0.0.1:8000",
+    "runtime": "3.13.16",
+    "server": "uvicorn (single worker), SQLAlchemy 2.1 + SQLite (development store)",
+    "dataset": "synthetic demo dataset: 2 organizations, 20 entities, 14 relationships, 2 documents",
+    "client": "httpx sequential requests, no concurrency (latency floor, not throughput ceiling)",
+    "note": "Sequential single-client measurement. Not a load test; concurrency and Postgres results must be measured separately before capacity claims are made."
+  },
+  "results": [
+    {
+      "endpoint": "GET /api/v1/health",
+      "n": 30,
+      "status": [
+        200
+      ],
+      "p50_ms": 1.4,
+      "p95_ms": 1.58,
+      "min_ms": 1.22,
+      "max_ms": 2.0,
+      "mean_ms": 1.42
+    },
+    {
+      "endpoint": "GET /api/v1/entities?limit=50",
+      "n": 30,
+      "status": [
+        200
+      ],
+      "p50_ms": 3.57,
+      "p95_ms": 4.14,
+      "min_ms": 3.1,
+      "max_ms": 4.28,
+      "mean_ms": 3.55
+    },
+    {
+      "endpoint": "GET /api/v1/analytics/overview",
+      "n": 30,
+      "status": [
+        200
+      ],
+      "p50_ms": 4.67,
+      "p95_ms": 5.11,
+      "min_ms": 4.11,
+      "max_ms": 5.63,
+      "mean_ms": 4.66
+    },
+    {
+      "endpoint": "GET /api/v1/graph",
+      "n": 15,
+      "status": [
+        200
+      ],
+      "p50_ms": 3.9,
+      "p95_ms": 4.26,
+      "min_ms": 3.54,
+      "max_ms": 4.4,
+      "mean_ms": 3.94
+    },
+    {
+      "endpoint": "GET /api/v1/search?q=embankment%20relief",
+      "n": 15,
+      "status": [
+        200
+      ],
+      "p50_ms": 5.62,
+      "p95_ms": 6.42,
+      "min_ms": 5.02,
+      "max_ms": 6.52,
+      "mean_ms": 5.84
+    },
+    {
+      "endpoint": "POST /api/v1/ai/ask",
+      "n": 15,
+      "status": [
+        200
+      ],
+      "p50_ms": 8.82,
+      "p95_ms": 9.7,
+      "min_ms": 7.89,
+      "max_ms": 11.56,
+      "mean_ms": 8.9
+    },
+    {
+      "endpoint": "GET /api/v1/geo/assets",
+      "n": 15,
+      "status": [
+        200
+      ],
+      "p50_ms": 3.63,
+      "p95_ms": 3.84,
+      "min_ms": 3.42,
+      "max_ms": 3.92,
+      "mean_ms": 3.65
+    }
+  ]
+}

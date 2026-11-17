@@ -1,0 +1,67 @@
+{
+  "measured_at": "2026-11-12T16:35:20Z",
+  "conditions": {
+    "database": "postgresql+psycopg://gotham:gotham_dev_pw@127.0.0.1:5432/gotham_scale",
+    "client": "FastAPI TestClient (in-process), single client",
+    "note": "in-process transport removes network cost; treat as a lower bound for real HTTP",
+    "n": 12
+  },
+  "endpoints": [
+    {
+      "endpoint": "GET /health",
+      "status": 200,
+      "p50_ms": 2.92,
+      "p95_ms": 6.84,
+      "max_ms": 34.1,
+      "n": 12
+    },
+    {
+      "endpoint": "GET /entities?page=1",
+      "status": 200,
+      "p50_ms": 8.61,
+      "p95_ms": 9.28,
+      "max_ms": 16.83,
+      "n": 12
+    },
+    {
+      "endpoint": "GET /entities?q=Khordha",
+      "status": 200,
+      "p50_ms": 196.17,
+      "p95_ms": 476.54,
+      "max_ms": 1417.75,
+      "n": 12
+    },
+    {
+      "endpoint": "GET /search?q=warehouse",
+      "status": 200,
+      "p50_ms": 28.41,
+      "p95_ms": 58.46,
+      "max_ms": 74.77,
+      "n": 12
+    },
+    {
+      "endpoint": "GET /geo/nearby (50km)",
+      "status": 200,
+      "p50_ms": 9.4,
+      "p95_ms": 11.2,
+      "max_ms": 205.28,
+      "n": 12
+    },
+    {
+      "endpoint": "GET /analytics/overview",
+      "status": 200,
+      "p50_ms": 504.46,
+      "p95_ms": 553.71,
+      "max_ms": 983.42,
+      "n": 12
+    },
+    {
+      "endpoint": "POST /ai/ask",
+      "status": 200,
+      "p50_ms": 59.43,
+      "p95_ms": 66.81,
+      "max_ms": 78.01,
+      "n": 12
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+# GOTHAM INDIA — local / evaluation stack.
+# Production deployments use the managed equivalents (see docs/DEPLOYMENT.md).
+name: gotham-india
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: gotham
+      POSTGRES_USER: gotham
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gotham -d gotham"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports: ["5432:5432"]
+
+  cache:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+    ports: ["6379:6379"]
+
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://gotham:${DB_PASSWORD:?set DB_PASSWORD}@db:5432/gotham
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: "480"
+      SEED_DEMO: "true"
+      AI_PROVIDER: ${AI_PROVIDER:-grounded-local}
+      REDIS_URL: redis://cache:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+    ports: ["8000:8000"]
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    depends_on: [api]
+    ports: ["8080:80"]
+    restart: unless-stopped
+
+secrets:
+  db_password:
+    file: ./deploy/secrets/db_password.txt
+
+volumes:
+  pgdata:
+  redisdata:

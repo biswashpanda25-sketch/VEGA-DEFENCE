@@ -1,0 +1,17 @@
+{
+  "harness": "gotham-ai-eval",
+  "prompt_version": "gotham-rag-v1",
+  "provider": "grounded-local",
+  "cases": 11,
+  "retrieval_precision": 0.375,
+  "retrieval_recall": 0.375,
+  "citation_coverage": 0.375,
+  "groundedness": 0.188,
+  "unsupported_claim_rate": 0.0,
+  "refusal_accuracy": 1,
+  "permission_leakage_rate": 0.0,
+  "latency_ms_p50": 22.1,
+  "latency_ms_p95": 55.5,
+  "total_citations": 10,
+  "notes": "Deterministic grounded composer; no external model invoked. Metrics measure retrieval + citation discipline, not language fluency."
+}

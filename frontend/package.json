@@ -1,0 +1,29 @@
+{
+  "name": "gotham-india-ui",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b --noCheck && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "e2e": "node e2e/smoke.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
+    "echarts": "^6.1.0",
+    "maplibre-gl": "^6.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "playwright": "^1.49.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "private": true,
+  "type": "module"
+}
